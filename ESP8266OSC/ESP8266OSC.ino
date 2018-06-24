@@ -19,8 +19,9 @@
       pi@nodered:~$ osc --host 192.168.1.207:8888 /osc 215 9999
                                                             OSC Port
 
+  - add MPR121 cap sensor board
   - send NoteOn & NoteOff OSC messages to Renoise
-  - send Analog Filter Cutoff to renoise
+  - (send Analog Filter Cutoff to renoise)
 --------------------------------------------------------------------------------------------- */
 #ifdef ESP8266
 #include <ESP8266WiFi.h>
@@ -32,18 +33,47 @@
 #include <OSCBundle.h>
 #include <OSCData.h>
 
+#include <Wire.h>
+#include "Adafruit_MPR121.h"
+Adafruit_MPR121 cap = Adafruit_MPR121();
+// Keeps track of the last pins touched
+// so we know when buttons are 'released'
+uint16_t lasttouched = 0;
+uint16_t currtouched = 0;
+
+char* players[]={
+"Brian",
+"Fynn",
+"Jannes",
+"Aron",
+"Konrad",
+"Hannes",
+"Julian",
+"Alejandro",
+"Marco",
+"Noah",
+"Fernando",
+"Achim",
+"Torsten"
+};
+
 char ssid[] = "DLRobotik";          // your network SSID (name)
 char pass[] = "Aquabot!";           // your network password
 
 // A UDP instance to let us send and receive packets over UDP
 WiFiUDP Udp;
-unsigned int outPort = 9999;          // remote port (not needed for receive)
 const unsigned int localPort = 8888;  // local port to listen for UDP packets
 
+unsigned int maxPort = 9999;          // remote port (not needed for receive)
+unsigned int renoisePort = 9000;      // remote port (not needed for receive)
+unsigned int p5Port = 9990;           // remote port (not needed for receive)
+
+unsigned int maxHost = 10;            // last octet of osc server host
+unsigned int renoiseHost = 10;        // last octet of osc server host
+unsigned int p5Host = 10;             // last octet of osc server host
 
 OSCErrorCode error;
 unsigned int ledState = LOW;              // LOW means led is *on*
-unsigned int osc_host = 215;              // last octet of osc server host
 #ifndef BUILTIN_LED
 #ifdef LED_BUILTIN
 #define BUILTIN_LED LED_BUILTIN
@@ -84,17 +114,46 @@ void setup() {
   Serial.println(Udp.localPort());
 #endif
 
+  delay(20);
+  Serial.println("Adafruit MPR121 Capacitive Touch sensor...");   
+  // Default address is 0x5A, if tied to 3.3V its 0x5B
+  // If tied to SDA its 0x5C and if SCL then 0x5D
+  if (!cap.begin(0x5A)) {
+    Serial.println("MPR121 not found, check wiring?");
+    while (1);
+  }
+  Serial.println("MPR121 found!");
 }
 
-void osc(OSCMessage &msg) {
-  osc_host = msg.getInt(0);
-  Serial.print("/osc host: ");
-  Serial.println(osc_host); 
+void renoise(OSCMessage &msg) {
+  renoiseHost = msg.getInt(0);
+  Serial.println("/set/renoise");
+  Serial.print("host: "); Serial.println(renoiseHost); 
   if (msg.isInt(1)) {
-     outPort = msg.getInt(1);
-     Serial.print("/osc port: ");
-     Serial.println(outPort);
-  }     
+     renoisePort = msg.getInt(1);
+     Serial.print("port: ");
+     Serial.println(renoisePort);
+  }   
+}
+void maxmsp(OSCMessage &msg) {
+  maxHost = msg.getInt(0);
+  Serial.println("/set/max");
+  Serial.print("host: "); Serial.println(maxHost); 
+  if (msg.isInt(1)) {
+     maxPort = msg.getInt(1);
+     Serial.print("port: ");
+     Serial.println(maxPort);
+  }   
+}
+void p5(OSCMessage &msg) {
+  p5Host = msg.getInt(0);
+  Serial.println("/set/p5");
+  Serial.print("host: "); Serial.println(p5Host); 
+  if (msg.isInt(1)) {
+     p5Port = msg.getInt(1);
+     Serial.print("port: ");
+     Serial.println(p5Port);
+  }   
 }
 
 void led(OSCMessage &msg) {
@@ -122,14 +181,6 @@ void sendPot(int sensor, IPAddress outIp, int outPort) {
   msg.empty();
 }
 
-void sendNums(int sensor, IPAddress outIp, int outPort) {
-  OSCMessage msg("/nums");
-  msg.add((int)sensor).add((int)42);
-  Udp.beginPacket(outIp, outPort);
-  msg.send(Udp);
-  Udp.endPacket();
-  msg.empty();
-}
 void sendRenoiseNoteOff(int note, IPAddress outIp, int outPort) {  
   OSCMessage msg("/renoise/trigger/note_off");
   msg.add((int)1).add((int)1).add(note);
@@ -148,25 +199,54 @@ void sendRenoiseEffect(float cutoff, IPAddress outIp, int outPort) {
   msg.empty();
 }
 
+void sendPlayer(int id, char* name, IPAddress outIp, int outPort) {
+  OSCMessage msg("/player");
+  msg.add(id);
+  msg.add(name);
+  Udp.beginPacket(outIp, outPort);
+  msg.send(Udp);
+  Udp.endPacket();
+  msg.empty();
+}
+
 void loop() {  
-  Serial.print("osc: host, port -> ");
-  Serial.print(osc_host); 
-  Serial.print(", ");
-  Serial.println(outPort); 
-  IPAddress outIp(192,168,1,osc_host); 
+
+  IPAddress maxIp(192,168,1,maxHost); 
+  IPAddress p5Ip(192,168,1,p5Host);
+  IPAddress renoiseIp(192,168,1,renoiseHost);
+  
+  currtouched = cap.touched();
+
+  // Get the currently touched pads
+  currtouched = cap.touched();
+  
+  for (uint8_t i=0; i<12; i++) {
+    // it if *is* touched and *wasnt* touched before, alert!
+    if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) ) {
+      Serial.print(i); Serial.print(" "); Serial.print(players[i]); Serial.println(" touched");
+      sendRenoiseNoteOn(48+i, maxIp, maxPort);   // C2 is 36, C3 is 48, C4 is 60
+      sendPlayer(i, players[i], p5Ip, p5Port);
+    }
+    // if it *was* touched and now *isnt*, alert!
+    if (!(currtouched & _BV(i)) && (lasttouched & _BV(i)) ) {
+      Serial.print(i); Serial.print(" "); Serial.print(players[i]); Serial.println(" released");
+      sendRenoiseNoteOff(48+i, maxIp, maxPort); 
+    }
+  }
+
+  // reset our state
+  lasttouched = currtouched;
 
   // fun with ReNoise
   // http://tutorials.renoise.com/wiki/Open_Sound_Control
-  int note = map(analogRead(A0),0,1024,0,119);
-  Serial.println(note);
-  
+  //int note = map(analogRead(A0),0,1024,0,119);
+  //Serial.println(note);
   //sendRenoiseNoteOn(note, outIp, outPort);   delay(100);
   //sendRenoiseNoteOff(note, outIp, outPort);  //delay(1000);
-
-  int sensor = analogRead(A0);
-  Serial.println(sensor);
-  sendPot(sensor, outIp, outPort);  //delay(1000);
-  sendNums(sensor, outIp, outPort);  //delay(1000);
+  
+  //int sensor = analogRead(A0);
+  //Serial.println(sensor);
+  //sendPot(sensor, outIp, outPort);  //delay(1000);
 
   /* Receive OSC message */
   OSCMessage msg;
@@ -177,7 +257,9 @@ void loop() {
     }
     if (!msg.hasError()) {
       msg.dispatch("/led", led);
-      msg.dispatch("/osc", osc);
+      msg.dispatch("/set/max", maxmsp);
+      msg.dispatch("/set/renoise", renoise);
+      msg.dispatch("/set/p5", p5);
     } else {
       error = msg.getError();
       Serial.print("error: ");
