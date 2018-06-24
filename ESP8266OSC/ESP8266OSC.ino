@@ -224,13 +224,13 @@ void loop() {
     // it if *is* touched and *wasnt* touched before, alert!
     if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) ) {
       Serial.print(i); Serial.print(" "); Serial.print(players[i]); Serial.println(" touched");
-      sendRenoiseNoteOn(48+i, maxIp, maxPort);   // C2 is 36, C3 is 48, C4 is 60
+      sendRenoiseNoteOn(48+i, renoiseIp, renoisePort);   // C2 is 36, C3 is 48, C4 is 60
       sendPlayer(i, players[i], p5Ip, p5Port);
     }
     // if it *was* touched and now *isnt*, alert!
     if (!(currtouched & _BV(i)) && (lasttouched & _BV(i)) ) {
       Serial.print(i); Serial.print(" "); Serial.print(players[i]); Serial.println(" released");
-      sendRenoiseNoteOff(48+i, maxIp, maxPort); 
+      sendRenoiseNoteOff(48+i, renoiseIp, renoisePort); 
     }
   }
 
