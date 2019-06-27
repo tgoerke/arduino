@@ -199,6 +199,31 @@ void sendRenoiseEffect(float cutoff, IPAddress outIp, int outPort) {
   msg.empty();
 }
 
+void sendRenoiseBPM(int bpm, IPAddress outIp, int outPort) { 
+  OSCMessage msg("/renoise/song/bpm");
+  msg.add(2).add((int)bpm);
+  Udp.beginPacket(outIp, outPort);
+  msg.send(Udp);
+  Udp.endPacket();
+  msg.empty();
+}
+
+void sendRenoiseTransportStart(IPAddress outIp, int outPort) { 
+  OSCMessage msg("/renoise/transport/start");
+  Udp.beginPacket(outIp, outPort);
+  msg.send(Udp);
+  Udp.endPacket();
+  msg.empty();
+}
+
+void sendRenoiseTransportStop(IPAddress outIp, int outPort) { 
+  OSCMessage msg("/renoise/transport/stop");
+  Udp.beginPacket(outIp, outPort);
+  msg.send(Udp);
+  Udp.endPacket();
+  msg.empty();
+}
+
 void sendPlayer(int id, char* name, IPAddress outIp, int outPort) {
   OSCMessage msg("/player");
   msg.add(id);
