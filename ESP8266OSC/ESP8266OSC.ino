@@ -224,6 +224,24 @@ void sendRenoiseTransportStop(IPAddress outIp, int outPort) {
   msg.empty();
 }
 
+void sendRenoiseInstrumentMonophonicMode(int onoff, IPAddress outIp, int outPort) { 
+  OSCMessage msg("/renoise/song/instrument/-1/monophonic");
+  msg.add((int)onoff);
+  Udp.beginPacket(outIp, outPort);
+  msg.send(Udp);
+  Udp.endPacket();
+  msg.empty();
+}
+
+void sendRenoiseInstrumentMonophonicGlide(int glide, IPAddress outIp, int outPort) { 
+  OSCMessage msg("/renoise/song/instrument/-1/monophonic_glide");
+  msg.add((int)glide;
+  Udp.beginPacket(outIp, outPort);
+  msg.send(Udp);
+  Udp.endPacket();
+  msg.empty();
+}
+
 void sendPlayer(int id, char* name, IPAddress outIp, int outPort) {
   OSCMessage msg("/player");
   msg.add(id);
